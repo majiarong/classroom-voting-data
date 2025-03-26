@@ -141,7 +141,8 @@
 
 <script>
     // 配置信息 - 需要替换为您的实际信息
-    const GITHUB_TOKEN = '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'; // 请勿公开此token
+   const GITHUB_TOKEN = prompt("请输入GitHub Token:");
+ 
     const REPO_OWNER = 'majiarong';
     const REPO_NAME = 'classroom-voting-data'; 
     const DATA_FILE = 'voting-data.json';
@@ -154,12 +155,13 @@
     async function loadData() {
         try {
             const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DATA_FILE}`;
-            const response = await fetch(url, {
-                headers: {
-                    'Authorization': `token ${GITHUB_TOKEN}`,
-                    'Accept': 'application/vnd.github.v3+json'
-                }
-            });
+const response = await fetch(url, {
+    headers: {
+        'Authorization': `token ${GITHUB_TOKEN}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json' // 添加此行
+    }
+});
             
             if (response.ok) {
                 const res = await response.json();
@@ -180,16 +182,20 @@
     }
     
     // 初始化空数据
-    function initializeEmptyData() {
-        ratings = {};
-        for (let i = 1; i <= totalGroups; i++) {
-            ratings[`group${i}`] = {
-                scores: Array(totalGroups).fill(0),
-                count: Array(totalGroups).fill(0)
-            };
-        }
-        saveData(); // 自动创建初始文件
+    async function initializeEmptyData() {
+    ratings = {};
+    for (let i = 1; i <= totalGroups; i++) {
+        ratings[`group${i}`] = {
+            scores: Array(totalGroups).fill(0),
+            count: Array(totalGroups).fill(0)
+        };
     }
+    try {
+        await saveData(); // 尝试自动创建文件
+    } catch (error) {
+        alert("首次使用请手动创建 voting-data.json 文件！");
+    }
+}
     
     // 保存数据到GitHub
     async function saveData() {
