@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>课堂小组互评系统</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .voting-section, .results-section {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .group-selector {
+            margin-bottom: 20px;
+        }
+        select, button {
+            padding: 8px 15px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            font-size: 16px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .rating-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+        }
+        .rate-group {
+            border: 1px solid #eee;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .stars {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 5px;
+        }
+        .star {
+            font-size: 24px;
+            color: #ccc;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .star:hover, .star.active {
+            color: #ffcc00;
+        }
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        .result-item {
+            background-color: #f9f9f9;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .result-item.header {
+            background-color: #e0e0e0;
+            font-weight: bold;
+        }
+        .average {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2196F3;
+        }
+        .refresh-btn {
+            background-color: #2196F3;
+            margin-top: 10px;
+        }
+        .refresh-btn:hover {
+            background-color: #0b7dda;
+        }
+    </style>
+</head>
+<body>
+    <h1>课堂小组互评系统</h1>
+    <div class="container">
+        <div class="voting-section">
+            <h2>评分区域</h2>
+            <div class="group-selector">
+                <label for="voter-group">我是第 </label>
+                <select id="voter-group">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                    <option value="11">11</option>
+                    <option value="12">12</option>
+                </select>
+                <label for="voter-group"> 小组</label>
+            </div>
+            
+            <div class="rating-container" id="rating-container">
+                <!-- 评分项将通过JavaScript动态生成 -->
+            </div>
+            
+            <button id="submit-btn">提交评分</button>
+        </div>
+        
+        <div class="results-section">
+            <h2>评分结果</h2>
+            <button id="refresh-btn" class="refresh-btn">刷新结果</button>
+            <div class="results-grid" id="results-grid">
+                <!-- 结果将通过JavaScript动态生成 -->
+            </div>
+        </div>
+    </div>
+
+<script>
+    // 配置信息 - 需要替换为您的实际信息
+    const GITHUB_TOKEN = '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'; // 请勿公开此token
+    const REPO_OWNER = 'majiarong';
+    const REPO_NAME = 'classroom-voting-data'; 
+    const DATA_FILE = 'voting-data.json';
+    
+    // 初始化数据
+    let ratings = {};
+    const totalGroups = 12;
+    
+    // 从GitHub加载数据
+    async function loadData() {
+        try {
+            const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DATA_FILE}`;
+            const response = await fetch(url, {
+                headers: {
+                    'Authorization': `token ${GITHUB_TOKEN}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+            
+            if (response.ok) {
+                const res = await response.json();
+                // GitHub返回的内容是Base64编码的
+                const content = atob(res.content.replace(/\s/g, ''));
+                ratings = JSON.parse(content);
+            } else if (response.status === 404) {
+                // 文件不存在，初始化数据
+                initializeEmptyData();
+            } else {
+                throw new Error(`加载失败: ${response.status}`);
+            }
+        } catch (error) {
+            console.error('加载数据失败:', error);
+            initializeEmptyData();
+        }
+        renderResults();
+    }
+    
+    // 初始化空数据
+    function initializeEmptyData() {
+        ratings = {};
+        for (let i = 1; i <= totalGroups; i++) {
+            ratings[`group${i}`] = {
+                scores: Array(totalGroups).fill(0),
+                count: Array(totalGroups).fill(0)
+            };
+        }
+        saveData(); // 自动创建初始文件
+    }
+    
+    // 保存数据到GitHub
+    async function saveData() {
+        try {
+            // 1. 首先获取文件当前SHA（用于更新）
+            let sha = null;
+            const getUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DATA_FILE}`;
+            const getResponse = await fetch(getUrl, {
+                headers: {
+                    'Authorization': `token ${GITHUB_TOKEN}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+            
+            if (getResponse.ok) {
+                const res = await getResponse.json();
+                sha = res.sha;
+            } else if (getResponse.status !== 404) {
+                throw new Error(`获取文件SHA失败: ${getResponse.status}`);
+            }
+            
+            // 2. 创建或更新文件
+            const content = JSON.stringify(ratings);
+            const base64Content = btoa(unescape(encodeURIComponent(content)));
+            
+            const updateUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DATA_FILE}`;
+            const updateResponse = await fetch(updateUrl, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `token ${GITHUB_TOKEN}`,
+                    'Accept': 'application/vnd.github.v3+json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    message: 'Update voting data',
+                    content: base64Content,
+                    sha: sha // 如果是更新就需要提供SHA
+                })
+            });
+            
+            if (!updateResponse.ok) {
+                throw new Error(`保存失败: ${updateResponse.status}`);
+            }
+            
+            console.log('数据保存成功');
+        } catch (error) {
+            console.error('保存数据失败:', error);
+            alert('保存失败，请检查控制台查看详情');
+        }
+    }
+    
+    // 渲染评分项
+    function renderRatingItems() {
+        const container = document.getElementById('rating-container');
+        container.innerHTML = '';
+        
+        const voterGroup = parseInt(document.getElementById('voter-group').value);
+        
+        for (let i = 1; i <= totalGroups; i++) {
+            if (i === voterGroup) continue; // 不能给自己评分
+            
+            const groupElement = document.createElement('div');
+            groupElement.className = 'rate-group';
+            groupElement.innerHTML = `
+                <div>为第 ${i} 小组评分:</div>
+                <div class="stars" data-group="${i}">
+                    <span class="star" data-value="1">☆</span>
+                    <span class="star" data-value="2">☆</span>
+                    <span class="star" data-value="3">☆</span>
+                    <span class="star" data-value="4">☆</span>
+                    <span class="star" data-value="5">☆</span>
+                </div>
+            `;
+            container.appendChild(groupElement);
+        }
+        
+        // 添加星星点击事件
+        document.querySelectorAll('.star').forEach(star => {
+            star.addEventListener('click', function() {
+                const starsContainer = this.parentElement;
+                const value = parseInt(this.getAttribute('data-value'));
+                const group = parseInt(starsContainer.getAttribute('data-group'));
+                
+                // 更新星星显示
+                starsContainer.querySelectorAll('.star').forEach((s, index) => {
+                    if (index < value) {
+                        s.classList.add('active');
+                        s.textContent = '★';
+                    } else {
+                        s.classList.remove('active');
+                        s.textContent = '☆';
+                    }
+                });
+                
+                // 存储当前选择的评分
+                starsContainer.setAttribute('data-selected', value);
+            });
+        });
+    }
+    
+    // 渲染结果
+    function renderResults() {
+        const container = document.getElementById('results-grid');
+        container.innerHTML = '';
+        
+        // 添加表头
+        const header1 = document.createElement('div');
+        header1.className = 'result-item header';
+        header1.textContent = '小组';
+        container.appendChild(header1);
+        
+        const header2 = document.createElement('div');
+        header2.className = 'result-item header';
+        header2.textContent = '平均分';
+        container.appendChild(header2);
+        
+        const header3 = document.createElement('div');
+        header3.className = 'result-item header';
+        header3.textContent = '总评分';
+        container.appendChild(header3);
+        
+        const header4 = document.createElement('div');
+        header4.className = 'result-item header';
+        header4.textContent = '评分次数';
+        container.appendChild(header4);
+        
+        // 计算并显示每个小组的结果
+        for (let i = 1; i <= totalGroups; i++) {
+            const groupKey = `group${i}`;
+            let totalScore = 0;
+            let totalCount = 0;
+            
+            // 计算该小组的总分和评分次数
+            for (let j = 0; j < totalGroups; j++) {
+                totalScore += ratings[groupKey]?.scores[j] || 0;
+                totalCount += ratings[groupKey]?.count[j] || 0;
+            }
+            
+            const average = totalCount > 0 ? (totalScore / totalCount).toFixed(2) : '0';
+            
+            // 添加结果行
+            const cell1 = document.createElement('div');
+            cell1.className = 'result-item';
+            cell1.textContent = `第 ${i} 组`;
+            container.appendChild(cell1);
+            
+            const cell2 = document.createElement('div');
+            cell2.className = 'result-item average';
+            cell2.textContent = average;
+            container.appendChild(cell2);
+            
+            const cell3 = document.createElement('div');
+            cell3.className = 'result-item';
+            cell3.textContent = totalScore;
+            container.appendChild(cell3);
+            
+            const cell4 = document.createElement('div');
+            cell4.className = 'result-item';
+            cell4.textContent = totalCount;
+            container.appendChild(cell4);
+        }
+    }
+    
+    // 提交评分
+    function submitRatings() {
+        const voterGroup = parseInt(document.getElementById('voter-group').value);
+        let hasRating = false;
+        
+        // 检查是否至少有一个评分
+        document.querySelectorAll('.stars').forEach(stars => {
+            const selected = stars.getAttribute('data-selected');
+            if (selected) {
+                hasRating = true;
+            }
+        });
+        
+        if (!hasRating) {
+            alert('请至少为一个小组评分！');
+            return;
+        }
+        
+        // 收集所有评分
+        document.querySelectorAll('.stars').forEach(stars => {
+            const group = parseInt(stars.getAttribute('data-group'));
+            const selected = stars.getAttribute('data-selected');
+            
+            if (selected) {
+                const score = parseInt(selected);
+                const groupKey = `group${group}`;
+                
+                // 初始化如果不存在
+                if (!ratings[groupKey]) {
+                    ratings[groupKey] = {
+                        scores: Array(totalGroups).fill(0),
+                        count: Array(totalGroups).fill(0)
+                    };
+                }
+                
+                // 更新评分数据
+                ratings[groupKey].scores[voterGroup-1] += score;
+                ratings[groupKey].count[voterGroup-1] += 1;
+            }
+        });
+        
+        // 保存数据并刷新结果
+        saveData();
+        renderResults();
+        alert('评分提交成功！');
+    }
+    
+    // 初始化页面
+    async function initPage() {
+        await loadData();
+        renderRatingItems();
+    }
+    
+    // 事件监听
+    document.getElementById('voter-group').addEventListener('change', renderRatingItems);
+    document.getElementById('submit-btn').addEventListener('click', submitRatings);
+    document.getElementById('refresh-btn').addEventListener('click', loadData);
+    
+    // 初始化页面
+    window.addEventListener('DOMContentLoaded', initPage);
+</script>
+</body>
+</html>
